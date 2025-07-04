@@ -1,37 +1,57 @@
-from fastapi import FastAPI
-from fastapi.responses import PlainTextResponse
+# main.py
+from fastapi import FastAPI, Request
 from sse_starlette.sse import EventSourceResponse
+import json
 import os
-import asyncio
 
 app = FastAPI()
+TRANSCRIPCIONES_DIR = "./clases"
 
-@app.get("/tools")
-async def tools():
-    return [{
-        "name": "clases_transcriptas",
-        "description": "Stream de clases transcritas de IA en formato texto",
-        "endpoint": "/stream",
-        "input_type": "none",
-        "output_type": "text"
-    }]
+@app.get("/", tags=["health"])
+async def root():
+    return {"message": "Servidor MCP funcionando. Usa /stream y /tools."}
 
-@app.get("/stream")
-async def stream():
+@app.get("/stream", summary="SSE stream de contexto")
+async def mcp_stream(request: Request):
     async def event_generator():
-        while True:
-            files = [f for f in os.listdir("clases") if f.endswith(".txt")]
-            if files:
-                for fname in sorted(files):
-                    with open(os.path.join("clases", fname), "r", encoding="utf-8") as f:
-                        text = f.read()
-                    yield {"event": "message", "data": text}
-                    await asyncio.sleep(10)
-            else:
-                yield {"event": "message", "data": "Sin clases disponibles aún."}
-                await asyncio.sleep(10)
+        if not os.path.exists(TRANSCRIPCIONES_DIR):
+            yield {"event": "error", "data": json.dumps({"error": "No se encontró carpeta clases"})}
+            return
+
+        archivos = [f for f in os.listdir(TRANSCRIPCIONES_DIR) if f.endswith(".txt")]
+        if not archivos:
+            yield {"event": "error", "data": json.dumps({"error": "No hay archivos .txt"})}
+            return
+
+        for nombre in archivos:
+            with open(os.path.join(TRANSCRIPCIONES_DIR, nombre), encoding="utf-8") as f:
+                contenido = f.read()[:3000]
+            yield {
+                "event": "add_context",
+                "data": json.dumps({
+                    "name": nombre.replace(".txt", ""),
+                    "type": "text",
+                    "value": contenido
+                })
+            }
+        yield {"event": "done", "data": ""}
+
     return EventSourceResponse(event_generator())
 
-@app.get("/")
-async def root():
-    return PlainTextResponse("Servidor MCP activo.")
+@app.get("/tools", summary="Lista de herramientas MCP")
+async def tools():
+    return {
+        "tools": [
+            {
+                "name": "clases_transcriptas",
+                "description": "Stream de clases transcritas de IA en formato texto",
+                "endpoint": "/stream",
+                "input_type": "none",
+                "output_type": "text"
+            }
+        ]
+    }
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)), reload=True)
