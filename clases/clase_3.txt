@@ -1,0 +1,3 @@
+
+Clase 3: Redes neuronales artificiales.
+En esta sesión exploraremos la estructura básica de las redes neuronales y su funcionamiento.
