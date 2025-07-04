@@ -1,11 +1,10 @@
-
 from fastapi import FastAPI, Request
 from sse_starlette.sse import EventSourceResponse
 import json
 import os
 
 app = FastAPI()
-TRANSCRIPCIONES_DIR = "./clases"  # Asegura ruta relativa correcta
+TRANSCRIPCIONES_DIR = "./clases"
 
 @app.get("/")
 async def root():
@@ -38,7 +37,7 @@ async def mcp_stream(request: Request):
             with open(filepath, "r", encoding="utf-8") as file:
                 contenido = file.read()
 
-            contenido = contenido[:3000]  # Límite opcional
+            contenido = contenido[:3000]
 
             yield {
                 "event": "add_context",
@@ -53,7 +52,19 @@ async def mcp_stream(request: Request):
 
     return EventSourceResponse(event_generator())
 
-# 👇 Esto permite ejecutar el servidor si corrés `python main.py` directamente
+@app.get("/tools")
+async def tools():
+    return [
+        {
+            "name": "clases_transcriptas",
+            "description": "Stream de clases transcritas de IA en formato texto",
+            "endpoint": "/stream",
+            "input_type": "none",
+            "output_type": "text"
+        }
+    ]
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+
