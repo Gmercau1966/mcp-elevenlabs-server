@@ -7,6 +7,10 @@ import os
 app = FastAPI()
 TRANSCRIPCIONES_DIR = "./clases"  # Asegura ruta relativa correcta
 
+@app.get("/")
+async def root():
+    return {"message": "Servidor MCP funcionando. Usa /stream para obtener las clases."}
+
 @app.get("/stream")
 async def mcp_stream(request: Request):
     async def event_generator():
