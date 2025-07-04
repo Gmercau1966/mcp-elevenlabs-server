@@ -1,38 +1,67 @@
-from flask import Flask, Response, jsonify
-import time
+from fastapi import FastAPI, Request
+from sse_starlette.sse import EventSourceResponse
+import os
+import json
 
-app = Flask(__name__)
+app = FastAPI()
+TRANSCRIPCIONES_DIR = "./clases"
 
-# Endpoint que expone los tools para ElevenLabs
-@app.route('/tools', methods=['GET'])
-def get_tools():
-    tools = [
+@app.get("/")
+async def root():
+    return {"message": "Servidor MCP funcionando. Usa /stream para obtener las clases."}
+
+@app.get("/stream")
+async def stream_clases(request: Request):
+    async def event_generator():
+        # Verifica si existe la carpeta de transcripciones
+        if not os.path.exists(TRANSCRIPCIONES_DIR):
+            yield {
+                "event": "error",
+                "data": json.dumps({"error": "No se encontró la carpeta de clases"})
+            }
+            return
+
+        # Lista los archivos .txt
+        archivos = [
+            f for f in os.listdir(TRANSCRIPCIONES_DIR)
+            if f.endswith(".txt")
+        ]
+
+        # Si no hay archivos .txt, lanza error
+        if not archivos:
+            yield {
+                "event": "error",
+                "data": json.dumps({"error": "No hay archivos .txt disponibles"})
+            }
+            return
+
+        # Streamea cada archivo como contexto
+        for archivo in archivos:
+            with open(os.path.join(TRANSCRIPCIONES_DIR, archivo), "r", encoding="utf-8") as f:
+                contenido = f.read()
+
+            yield {
+                "event": "add_context",
+                "data": json.dumps({
+                    "name": archivo.replace(".txt", ""),
+                    "type": "text",
+                    "value": contenido[:3000]  # Trunca a 3000 caracteres si es largo
+                })
+            }
+
+        # Señal de fin del stream
+        yield {"event": "done", "data": ""}
+
+    return EventSourceResponse(event_generator())
+
+@app.get("/tools")
+async def tools():
+    return [
         {
             "name": "clases_transcriptas",
-            "description": "Stream de clases transcriptas de IA en formato texto",
+            "description": "Stream de clases transcritas de IA en formato texto",
             "endpoint": "/stream",
             "input_type": "none",
-            "output_type": "text",
-            "type": "text"  # ← Este campo es clave para que ElevenLabs lo lea correctamente
+            "output_type": "text"
         }
     ]
-    return jsonify({"tools": tools})
-
-# Endpoint de tipo stream para ElevenLabs
-@app.route('/stream', methods=['GET'])
-def stream_text():
-    def generate():
-        yield 'event: add_context\n'
-        yield 'data: {"name": "clase_2", "type": "text", "value": "(250) 💥 CURSO DE IA GRATIS - Día 2: Crea GPTs Personalizados como un PRO..."}\n\n'
-        time.sleep(1)
-        yield 'event: add_context\n'
-        yield 'data: {"name": "clase_3", "type": "text", "value": "(250) 💥 CURSO DE IA GRATIS - Día 3: Automatiza con Make y Descubre la 3° jornada..."}\n\n'
-    return Response(generate(), mimetype='text/event-stream')
-
-# Root para ver que el server está vivo
-@app.route('/')
-def home():
-    return 'MCP Server for ElevenLabs running'
-
-if __name__ == '__main__':
-    app.run(debug=True, port=10000)
