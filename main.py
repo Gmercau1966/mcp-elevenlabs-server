@@ -1,10 +1,10 @@
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from sse_starlette.sse import EventSourceResponse
 import json
 import os
 
 app = FastAPI()
-
 TRANSCRIPCIONES_DIR = "./clases"
 
 @app.get("/")
@@ -35,8 +35,7 @@ async def mcp_stream(request: Request):
             with open(filepath, "r", encoding="utf-8") as file:
                 contenido = file.read()
 
-            # Cortamos el contenido para no saturar
-            contenido = contenido[:3000]
+            contenido = contenido[:3000]  # Límite para evitar sobrecarga
 
             yield {
                 "event": "add_context",
@@ -53,19 +52,20 @@ async def mcp_stream(request: Request):
 
 @app.get("/tools")
 async def tools():
-    return {
+    tools_data = {
         "tools": [
             {
                 "name": "clases_transcriptas",
-                "description": "Stream de clases transcritas de IA en formato texto",
+                "description": "Stream de clases transcriptas de IA en formato texto",
                 "endpoint": "/stream",
                 "input_type": "none",
                 "output_type": "text"
             }
         ]
     }
+    return JSONResponse(content=tools_data)  # Asegura cabecera Content-Type: application/json
 
-# Esto solo corre localmente, en Render no es necesario
+# Para desarrollo local (no se usa en Render, pero lo dejo por si lo corrés localmente)
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
